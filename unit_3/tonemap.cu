@@ -184,7 +184,23 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     printf("%d\n", reduce(d_a, 8, device_plus<int>()));
     cudaFree(d_a);
     */
-    min_logLum = reduce(d_logLuminance, numRows * numCols, device_min<float>(), INFINITY);
-    max_logLum = reduce(d_logLuminance, numRows * numCols, device_max<float>(), -INFINITY);
-    float range = max_logLum - min_logLum;
+    unsigned int nsamples = numRows * numCols;
+        
+    min_logLum = reduce(d_logLuminance, nsamples, device_min<float>());
+    max_logLum = reduce(d_logLuminance, nsamples, device_max<float>());
+        
+    unsigned int * d_hist;
+    checkCudaErrors(cudaMalloc((void**)&d_hist, numBins * sizeof(unsigned int)));
+
+    {
+        unsigned int bsz = min(512, nsamples);
+        cudaMemset(d_hist, 0, numBins * sizeof(unsigned int));
+        histogram_kernel<<<nsamples/bsz + (nsamples%bsz != 0), bsz>>>(d_logLuminance, nsamples, min_logLum, max_logLum, numBins, d_hist);
+    }
+    
+    std::vector<unsigned int> h_hist(numBins);
+    checkCudaErrors(cudaMemcpy(h_hist.data(), d_hist, numBins * sizeof(unsigned int), cudaMemcpyDeviceToHost));
+    for (int i = 0; i < numBins; ++i)
+        printf("%u\n", h_hist[i]);
+    checkCudaErrors(cudaFree(d_hist));
 }
