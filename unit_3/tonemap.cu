@@ -144,6 +144,18 @@ template <typename T> struct device_plus { __inline__ __device__ T operator()(T 
 template <typename T> struct device_max { __inline__ __device__ T operator()(T x, T y) const {return max(x,y);} };
 template <typename T> struct device_min { __inline__ __device__ T operator()(T x, T y) const {return min(x,y);} };
 
+template <typename T>
+__global__ void histogram_kernel(T const * const d_sample, unsigned int const nsamples, T const sample_min, T const sample_max, unsigned int const nbins, unsigned int * const d_hist)
+{
+    unsigned int i = threadIdx.x + blockDim.x * blockIdx.x;
+    
+    if (i >= nsamples) return;
+    
+    unsigned int bin = float(d_sample[i] - sample_min) / float(sample_max - sample_min) * nbins;
+    bin = min(bin, nbins-1);
+    atomicAdd(d_hist+bin, 1);
+}
+
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
