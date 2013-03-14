@@ -88,7 +88,7 @@
 #define REDUCE_SHM 1024
 
 template <typename T, typename Op>
-__global__ void reduce_inplace(T * const d_buf, unsigned int n, Op const op, T const ne = T())
+__global__ void reduce_kernel(T const * const d_input, T * const d_output, unsigned int const n, Op const op)
 {
     assert(blockDim.x <= REDUCE_SHM);
     
@@ -97,35 +97,41 @@ __global__ void reduce_inplace(T * const d_buf, unsigned int n, Op const op, T c
 
     __shared__ T s_buf[REDUCE_SHM];
     
-    s_buf[i] = (j < n) ? d_buf[j] : ne;
+    if (j < n)
+        s_buf[i] = d_input[j];
     
     __syncthreads();
     
-    for (unsigned int s = blockDim.x; s > 1; s >>= 1) {
-        T x;
-        if ((i & 1) == 0)
-            x = op(s_buf[i], s_buf[i+1]);
+    for (unsigned int s = min(blockDim.x, n - blockDim.x * blockIdx.x); s > 1; s >>= 1) {
+        T x = s_buf[i];
+        if ((i & 1) == 0 && i + 1 < s)
+            x = op(x, s_buf[i+1]);
         __syncthreads();
-        if ((i & 1) == 0)
+        if ((i & 1) == 0 && i + 1 <= s)
             s_buf[i>>1] = x;
         __syncthreads();
+        s = s + (s&1);
     }
     
     if (i == 0) {
-        d_buf[blockIdx.x] = s_buf[0];
+        d_output[blockIdx.x] = s_buf[0];
     }
 }
 
 template <typename T, typename Op>
-T reduce(T const * const d_input, unsigned int const n, Op const op, T const ne = T())
+T reduce(T const * const d_input, unsigned int const n, Op const op)
 {
-    T * d_buf;
-    checkCudaErrors(cudaMalloc((void**)&d_buf, sizeof(T)*n));
-    checkCudaErrors(cudaMemcpy(d_buf, d_input, sizeof(T)*n, cudaMemcpyDeviceToDevice));
-    
     unsigned int bsz = min(512, n);
-    for (unsigned int m = n; m > 1; m = m / bsz + (m%bsz != 0))
-        reduce_inplace<T, Op><<<m/bsz + (m%bsz != 0), bsz>>>(d_buf, m, op, ne);
+    
+    T * d_buf;
+    T const * d_in = d_input;
+    unsigned int nbuf = n / bsz + (n%bsz != 0);
+    checkCudaErrors(cudaMalloc((void**)&d_buf, nbuf*sizeof(T)));
+    
+    for (unsigned int m = n; m > 1; m = m / bsz + (m%bsz != 0)) {
+        reduce_kernel<<<m/bsz + (m%bsz != 0), bsz>>>(d_in, d_buf, m, op);
+        d_in = d_buf;
+    }
     cudaDeviceSynchronize();
     
     T res;
