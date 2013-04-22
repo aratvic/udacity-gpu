@@ -156,6 +156,56 @@ __global__ void histogram_kernel(T const * const d_sample, unsigned int const ns
     atomicAdd(d_hist+bin, 1);
 }
 
+template <typename T>
+__global__ void histogram_kernel(T const * const d_sample, unsigned int const nsamples, T const sample_min, T const sample_max, unsigned int const nbins, unsigned int * const d_hist)
+{
+    unsigned int i = threadIdx.x + blockDim.x * blockIdx.x;
+    
+    if (i >= nsamples) return;
+    
+    unsigned int bin = float(d_sample[i] - sample_min) / float(sample_max - sample_min) * nbins;
+    bin = min(bin, nbins-1);
+    atomicAdd(d_hist+bin, 1);
+}
+
+template <typename T, typename Op>
+__global__ void exclusive_scan_kernel(T const * const d_input, T * const d_output, unsigned int n, Op const op, T ne = T())
+{
+    assert(blockDim.x <= SCAN_SHM);
+    
+    unsigned int i = threadIdx.x;
+    unsigned int j = threadIdx.x + blockDim.x * blockIdx.x;
+
+    __shared__ T s_buf[SCAN_SHM];
+    
+    if (j < n)
+        s_buf[i] = d_input[j];
+    
+    __syncthreads();
+    
+    unsigned int m = min(blockDim.x, n - blockDim.x * blockIdx.x);
+    if (i >= m) return;
+    
+    if (i==0) printf("m=%d\n", m);
+    for (int s = 1; s < m; s <<= 1) {
+        int k = (i+1) % (s<<1);
+        int ii = (k == 0) ? i - s : i - k + s;
+        T x = s_buf[i];
+        if (k == 0 || (i == m - 1 && ii != i))
+            x = op(x, s_buf[ii]);
+        __syncthreads();
+        if (k == 0 || i == m - 1)
+            s_buf[i] = x;
+        __syncthreads();
+        if (i < m)
+            printf("%d %d\n", i, s_buf[i]);
+        if (i == 0) printf("===\n");
+    }
+    
+    if (j < n)
+         d_output[j] = s_buf[i];    
+}
+
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
