@@ -304,7 +304,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
        the cumulative distribution of luminance values (this should go in the
        incoming d_cdf pointer which already has been allocated for you)       */
 
-    
+    /*
     int h_a[10000];
     int n = 1111;
     for (int i = 0; i < n; ++i) h_a[i] = i;
@@ -328,6 +328,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     printf("%d\n", f);
         
     return;
+    */
     
     
     unsigned int nsamples = numRows * numCols;
@@ -342,7 +343,13 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
         unsigned int bsz = min(512, nsamples);
         cudaMemset(d_hist, 0, numBins * sizeof(unsigned int));
         histogram_kernel<<<nsamples/bsz + (nsamples%bsz != 0), bsz>>>(d_logLuminance, nsamples, min_logLum, max_logLum, numBins, d_hist);
+        //int * h = new int[numBins];
+        //cudaMemcpy(d_hist, h, nbins*sizeof(int));
+        //for (int i = 0; i < nsamples; ++i)
+            
+        inclusive_scan(d_hist, d_cdf, numBins, device_plus<int>());
         //exclusive_scan_kernel<<<nsamples/bsz + (nsamples%bsz != 0), bsz>>>(d_hist, d_cdf, nsamples, device_plus<int>());
+        //delete[] h;
     }
     
     /*
