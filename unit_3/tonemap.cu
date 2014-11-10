@@ -115,7 +115,7 @@ __global__ void reduce_kernel(T const * const d_input, T * const d_output, unsig
         if ((i & 1) == 0 && i + 1 <= s)
             s_buf[i>>1] = x;
         __syncthreads();
-        s = s + (s&1);
+        s++;
     }
 
     if (i == 0) {
