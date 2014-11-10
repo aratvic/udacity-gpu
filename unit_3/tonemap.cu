@@ -85,18 +85,22 @@
 #include <cstdio>
 #include <vector>
 
-#define REDUCE_SHM 1024
+// assume at least compute capability 2.0
+#define SHM_BYTES 48*1024
+#define THREADS_PER_BLOCK 1024
+
 #define SCAN_SHM 1024
 
 template <typename T, typename Op>
 __global__ void reduce_kernel(T const * const d_input, T * const d_output, unsigned int const n, Op const op)
 {
-    assert(blockDim.x <= REDUCE_SHM);
+    assert(blockDim.x <= THREADS_PER_BLOCK);
+    assert(blockDim.x <= SHM_BYTES / sizeof(T));
 
     unsigned int i = threadIdx.x;
     unsigned int j = threadIdx.x + blockDim.x * blockIdx.x;
 
-    __shared__ T s_buf[REDUCE_SHM];
+    __shared__ T s_buf[THREADS_PER_BLOCK];
 
     if (j < n)
         s_buf[i] = d_input[j];
@@ -122,7 +126,7 @@ __global__ void reduce_kernel(T const * const d_input, T * const d_output, unsig
 template <typename T, typename Op>
 T reduce(T const * const d_input, unsigned int const n, Op const op)
 {
-    unsigned int bsz = min(512, n);
+    unsigned int bsz = min(THREADS_PER_BLOCK, n);
 
     T * d_buf;
     T const * d_in = d_input;
