@@ -133,7 +133,7 @@ T reduce(T const * const d_input, unsigned int const n, Op const op)
     unsigned int nbuf = n / bsz + (n%bsz != 0);
     checkCudaErrors(cudaMalloc((void**)&d_buf, nbuf*sizeof(T)));
 
-    for (unsigned int m = n; m > 1; m = m / bsz + (m%bsz != 0)) {
+    for (unsigned int m = n; m > 1; m = m/bsz + (m%bsz != 0)) {
         reduce_kernel<<<m/bsz + (m%bsz != 0), bsz>>>(d_in, d_buf, m, op);
         d_in = d_buf;
     }
@@ -261,8 +261,8 @@ void inclusive_scan(T const * const d_input, T * const d_output, unsigned int co
     zip_kernel<<<nblocks, bsz>>>(d_output, d_input, d_output, n, op);
 }
 
-void your_histogram_and_prefixsum(const float* const d_logLuminance,
-                                  unsigned int* const d_cdf,
+void your_histogram_and_prefixsum(const float * const d_logLuminance,
+                                  unsigned int * const d_cdf,
                                   float &min_logLum,
                                   float &max_logLum,
                                   const size_t numRows,
