@@ -1,4 +1,4 @@
 udacity-gpu
 ===========
 
-udacity GPU course assignments
+Udacity Intro to Parallel Programming online course assignments.
